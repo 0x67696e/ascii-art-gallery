@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Digital Rain · ASCII Art Gallery</title>
+<link rel="stylesheet" href="../assets/piece.css">
+</head>
+<body>
+<script src="../assets/ascii.js"></script>
+<script>
+/* Columns of falling glyphs: a bright head and a fading green trail. */
+const GLYPHS = "0123456789ABCDEFabcdef<>/\\|=+*#$%&@:;{}[]";
+const pick = () => GLYPHS.charCodeAt((Math.random() * GLYPHS.length) | 0);
+let drops = [], cells;
+function spawn(d, rows, first) {
+  d.y = first ? Math.random() * rows : -Math.random() * rows * 0.5;
+  d.v = 6 + Math.random() * 20;
+  d.len = 6 + ((Math.random() * Math.random() * 34) | 0);
+}
+Ascii.play({
+  title: "Digital Rain",
+  bg: "#020604",
+  cols: 150, embedCols: 80,
+  init(g) {
+    drops = [];
+    cells = new Uint16Array(g.N);
+    for (let i = 0; i < g.N; i++) cells[i] = pick();
+    for (let x = 0; x < g.cols; x++) {
+      if (Math.random() < 0.7) { const d = { x }; spawn(d, g.rows, true); drops.push(d); }
+      if (Math.random() < 0.15) { const d = { x }; spawn(d, g.rows, false); drops.push(d); }
+    }
+  },
+  frame(g, t, dt) {
+    for (let n = 0; n < g.N * 0.01; n++) cells[(Math.random() * g.N) | 0] = pick();
+    for (const d of drops) {
+      d.y += d.v * dt;
+      if (d.y - d.len > g.rows) spawn(d, g.rows, false);
+      const head = Math.floor(d.y);
+      for (let k = 0; k < d.len; k++) {
+        const y = head - k;
+        if (y < 0 || y >= g.rows) continue;
+        const i = y * g.cols + d.x;
+        if (k === 0) { g.set(d.x, y, cells[i], 0.85, 1, 0.9); continue; }
+        const a = Math.pow(1 - k / d.len, 1.6);
+        if (g.c[i] && g.g[i] > a) continue;      // keep the brighter of two trails
+        g.set(d.x, y, cells[i], 0.05 + 0.15 * a, 0.12 + 0.85 * a, 0.08 + 0.3 * a);
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Warp Speed · ASCII Art Gallery</title>
+<link rel="stylesheet" href="../assets/piece.css">
+</head>
+<body>
+<script src="../assets/ascii.js"></script>
+<script>
+/* Stars fly toward the camera; each draws a streak pointing away from the centre. */
+const STARS = [];
+const reset = (s, far) => {
+  const a = Math.random() * Math.PI * 2, r = 0.03 + Math.random() * 1.2;
+  s.x = Math.cos(a) * r; s.y = Math.sin(a) * r;
+  s.z = far ? 1 : 0.05 + Math.random() * 0.95; s.hue = Math.random();
+};
+for (let i = 0; i < 750; i++) { const s = {}; reset(s, false); STARS.push(s); }
+// a character that matches the streak direction (dx, dy in screen pixels, y pointing down)
+const DIR = ["-", "\\", "|", "/", "-", "\\", "|", "/"];
+const dirChar = (dx, dy) => DIR[Math.round((Math.atan2(dy, dx) + Math.PI) / (Math.PI / 4)) % 8];
+Ascii.play({
+  title: "Warp Speed",
+  bg: "#020309",
+  cols: 160, embedCols: 90,
+  frame(g, t, dt) {
+    const speed = 0.35 + 0.35 * Math.sin(t * 0.35) ** 2;
+    const F = Math.max(g.W, g.H) * 0.42;
+    const cx = g.W / 2, cy = g.H / 2;
+    // a faint glow in the middle
+    for (let k = 0; k < 3; k++) g.set(cx / g.cw - 1 + k, cy / g.ch, ".", 0.5, 0.55, 0.8);
+    for (const s of STARS) {
+      s.z -= speed * dt;
+      if (s.z <= 0.02) { reset(s, true); continue; }
+      const px = cx + (s.x / s.z) * F, py = cy + (s.y / s.z) * F;
+      if (px < 0 || py < 0 || px >= g.W || py >= g.H) { reset(s, true); continue; }
+      const b = Math.min(1, (1 - s.z) * 1.25);
+      const tint = s.hue < 0.12 ? [1, 0.78, 0.55] : s.hue < 0.3 ? [0.55, 0.72, 1] : [0.86, 0.9, 1];
+      const z2 = Math.min(1, s.z + speed * 0.2);
+      const qx = cx + (s.x / z2) * F, qy = cy + (s.y / z2) * F;
+      const ch = dirChar(px - qx, py - qy);
+      const steps = Math.ceil(Math.max(Math.abs(px - qx) / g.cw, Math.abs(py - qy) / g.ch));
+      for (let k = steps; k >= 1; k--) {
+        const f = k / (steps + 1), a = b * (1 - f) * 0.75;
+        const col = ((px + (qx - px) * f) / g.cw) | 0, row = ((py + (qy - py) * f) / g.ch) | 0;
+        if (col < 0 || row < 0 || col >= g.cols || row >= g.rows) continue;
+        const i = row * g.cols + col;
+        if (g.c[i] && g.r[i] > a) continue;
+        g.set(col, row, a > 0.15 ? ch : ".", tint[0] * a, tint[1] * a, tint[2] * a);
+      }
+      const head = s.z > 0.7 ? "." : s.z > 0.45 ? "+" : s.z > 0.22 ? "*" : "@";
+      g.set(px / g.cw, py / g.ch, head, tint[0] * b, tint[1] * b, tint[2] * b);
+    }
+  }
+});
+</script>
+</body>
+</html>

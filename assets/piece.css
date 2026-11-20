@@ -1,0 +1,10 @@
+html, body { margin: 0; height: 100%; background: #05070d; overflow: hidden; }
+.back, .title {
+  position: fixed; top: 12px; z-index: 2;
+  font: 12px ui-monospace, Menlo, Consolas, monospace;
+  color: #9aa3b5; background: rgba(5, 7, 13, .65);
+  padding: 6px 10px; border: 1px solid rgba(154, 163, 181, .25); border-radius: 6px;
+}
+.back { left: 12px; text-decoration: none; }
+.back:hover { color: #fff; border-color: rgba(255, 255, 255, .5); }
+.title { right: 12px; color: #6f7890; }

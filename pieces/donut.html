@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spinning Donut · ASCII Art Gallery</title>
+<link rel="stylesheet" href="../assets/piece.css">
+</head>
+<body>
+<script src="../assets/ascii.js"></script>
+<script>
+/* A torus, sampled as a surface, lit by one light and z-buffered into characters. */
+const RAMP = ".,-~:;=!*#$@";
+Ascii.play({
+  title: "Spinning Donut",
+  bg: "#07050b",
+  cols: 150, embedCols: 90,
+  frame(g, t) {
+    const A = t * 0.9, B = t * 0.47;
+    const cA = Math.cos(A), sA = Math.sin(A), cB = Math.cos(B), sB = Math.sin(B);
+    const R1 = 1, R2 = 2, K2 = 6;
+    const half = Math.min(g.W, g.H) * 0.4;
+    const K1 = half * K2 / (R1 + R2) * 0.95;
+    const phStep = Math.max(0.004, Math.min(0.02, g.cw * 0.35 / half));
+    const thStep = Math.max(0.015, Math.min(0.05, g.ch * 0.35 / (half / 3)));
+    const cx0 = g.W / 2, cy0 = g.H / 2;
+    for (let th = 0; th < 6.2832; th += thStep) {
+      const ct = Math.cos(th), st = Math.sin(th);
+      const cx = R2 + R1 * ct, cy = R1 * st;
+      for (let ph = 0; ph < 6.2832; ph += phStep) {
+        const cp = Math.cos(ph), sp = Math.sin(ph);
+        const x = cx * (cB * cp + sA * sB * sp) - cy * cA * sB;
+        const y = cx * (sB * cp - sA * cB * sp) + cy * cA * cB;
+        const z = K2 + cA * cx * sp + cy * sA;
+        const ooz = 1 / z;
+        const col = ((cx0 + K1 * ooz * x) / g.cw) | 0;
+        const row = ((cy0 - K1 * ooz * y) / g.ch) | 0;
+        if (col < 0 || row < 0 || col >= g.cols || row >= g.rows) continue;
+        const i = row * g.cols + col;
+        if (-ooz >= g.z[i]) continue;
+        g.z[i] = -ooz;
+        const L = cp * ct * sB - cA * ct * sp - sA * st + cB * (cA * st - ct * sA * sp);
+        const l = Math.max(0, L) / 1.4143;
+        const k = RAMP.charCodeAt(Math.min(RAMP.length - 1, (l * RAMP.length) | 0));
+        // deep violet in shadow -> hot pink -> peach highlights
+        const r = 0.28 + 0.75 * l + 0.2 * l * l;
+        const gg = 0.08 + 0.25 * l + 0.55 * l * l * l;
+        const b = 0.42 + 0.25 * l - 0.15 * l * l;
+        g.c[i] = k; g.r[i] = r; g.g[i] = gg; g.b[i] = b;
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>

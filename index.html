@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ASCII Art Gallery</title>
+<meta name="description" content="文字だけで描いたアニメーションと絵のギャラリー">
+<style>
+  :root {
+    --bg: #07090f; --panel: #0c1019; --line: rgba(150, 165, 195, .16);
+    --text: #d4dbea; --muted: #7d879c; --accent: #ffc35a;
+    --mono: ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; color: var(--text);
+    font: 15px/1.7 system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+  header { padding: 56px 0 28px; }
+  .logo {
+    margin: 0; font: 600 clamp(6px, 1.25vw, 13px)/1.15 var(--mono);
+    color: var(--accent); white-space: pre; overflow: hidden;
+    text-shadow: 0 0 18px rgba(255, 195, 90, .35);
+  }
+  header p { color: var(--muted); margin: 18px 0 0; max-width: 46em; }
+  h2 {
+    font: 600 13px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+    color: var(--muted); margin: 44px 0 16px; display: flex; align-items: center; gap: 12px;
+  }
+  h2::after { content: ""; flex: 1; border-top: 1px dashed var(--line); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; align-items: start; }
+
+  .card {
+    display: block; text-decoration: none; color: inherit;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+    transition: transform .2s ease, border-color .2s ease;
+  }
+  a.card:hover, a.card:focus-visible { transform: translateY(-3px); border-color: rgba(255, 195, 90, .45); outline: none; }
+  .screen { position: relative; aspect-ratio: 4 / 3; background: #04060b; }
+  .screen iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; }
+  .meta { padding: 12px 16px 14px; border-top: 1px solid var(--line); }
+  .meta h3 { margin: 0; font: 600 15px/1.4 var(--mono); }
+  .meta p { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+  .text-card .art {
+    margin: 0; padding: 18px 14px; height: 250px; display: grid; place-items: center;
+    font: 12px/1.25 var(--mono); color: #c9d4ea; white-space: pre; overflow: hidden;
+    background: #04060b;
+  }
+  .text-card .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .copy {
+    font: 12px var(--mono); color: var(--text); background: transparent; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px;
+  }
+  .copy:hover { border-color: var(--accent); color: var(--accent); }
+  footer { color: var(--muted); font-size: 13px; padding: 48px 0 56px; }
+  footer a { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+<pre class="logo" aria-label="ASCII ART GALLERY">
+   _   ___  ___ ___ ___     _   ___ _____    ___   _   _    _    ___ ___ __   __
+  /_\ / __|/ __|_ _|_ _|   /_\ | _ \_   _|  / __| /_\ | |  | |  | __| _ \\ \ / /
+ / _ \\__ \ (__ | | | |   / _ \|   / | |   | (_ |/ _ \| |__| |__| _||   / \ V /
+/_/ \_\___/\___|___|___| /_/ \_\_|_\ |_|    \___/_/ \_\____|____|___|_|_\  |_|
+</pre>
+    <p>文字だけで描いたアニメーションと絵のギャラリーです。カードを開くと全画面で動きます。テキストアートは「コピー」でそのまま貼り付けられます。</p>
+  </header>
+
+  <h2>Animations</h2>
+  <div class="grid" id="anims"></div>
+
+  <h2>Text Art</h2>
+  <div class="grid" id="texts"></div>
+
+  <footer>
+    すべて HTML / CSS / JavaScript だけで動いています。ソースは
+    <a href="https://github.com/0x67696e/ascii-art-gallery">GitHub</a> にあります。
+  </footer>
+</div>
+
+<script>
+const ANIMS = [
+  { file: "christmas-tree", title: "Christmas Tree", desc: "3万個の点で作った立体のツリー。電球がまたたき、雪が降ります。ドラッグで回転。" },
+  { file: "donut",          title: "Spinning Donut", desc: "回転するドーナツ。光の当たり方で文字が変わります。" },
+  { file: "fire",           title: "Campfire",       desc: "熱が上へ広がって冷えていく、ゆらめく焚き火。" },
+  { file: "rain",           title: "Digital Rain",   desc: "降り注ぐ文字の雨。先頭が光り、尾を引いて消えます。" },
+  { file: "plasma",         title: "Plasma",         desc: "4つの波を重ねた、色の移ろうプラズマ模様。" },
+  { file: "warp",           title: "Warp Speed",     desc: "星のあいだをワープで突き抜けます。" },
+];
+
+const TEXTS = [
+  { title: "Mountains", art: String.raw`
+        *           .                    *          .
+   .          /\               .
+             /  \        /\                   /\        *
+     *      /    \      /  \     /\          /  \
+           /  /\  \    /    \   /  \   /\   /    \
+      /\  /  /  \  \  /  /\  \ /    \ /  \ /  /\  \
+     /  \/  /    \  \/  /  \  \      /    \  /  \  \
+ ___/___/__/______\__\_/____\__\____/______\/____\__\___
+   ~~    ~~~   ~    ~~~   ~~    ~   ~~~   ~~   ~~~   ~~` },
+  { title: "Night Sail", art: String.raw`
+                          ___
+        *       .       .'   '.        *
+                       /  .-'  \
+     .        *       |  /      |   .
+                       \  '-.  /
+           .            '.___.'        *
+                  |\
+                  | \          .
+      *           |  \
+                  |   \
+                  |____\
+         _________|_________
+         \                 /
+  ~~~~~~~~\_______________/~~~~~~~~~~~~
+    ~~~~      ~~~~~~~~        ~~~~~` },
+  { title: "Rocket", art: String.raw`
+           /\
+          /  \
+         /    \
+        |  ()  |
+        |      |
+        |  ||  |
+       /|  ||  |\
+      / |      | \
+     /__|______|__\
+         /_/\_\
+        ( (  ) )
+         ) )( (
+        ( (  ) )
+          '  '` },
+  { title: "Cactus", art: String.raw`
+            .-.
+            | |
+        .-. | |
+        | | | | .-.
+        | '-' | | |
+        '-.   '-' |
+          |   .---'
+          |   |
+      .---'   '---.
+      |  \_____/  |
+      '-----------'` },
+  { title: "Cat", art: String.raw`
+      /\___/\
+     (  =^.^= )
+      )       (
+     (  |   |  )
+      \_|   |_/~~` },
+  { title: "Mandelbrot", art: null },   // computed below
+];
+
+// a Mandelbrot set, computed into characters
+(function () {
+  const W = 60, H = 25, ramp = " .:-=+*#%@", lines = [];
+  for (let y = 0; y < H; y++) {
+    let s = "";
+    for (let x = 0; x < W; x++) {
+      const cr = -2.15 + (x / (W - 1)) * 2.75, ci = -1.15 + (y / (H - 1)) * 2.3;
+      let zr = 0, zi = 0, n = 0;
+      while (n < 80 && zr * zr + zi * zi < 4) { const t = zr * zr - zi * zi + cr; zi = 2 * zr * zi + ci; zr = t; n++; }
+      s += n === 80 ? "@" : ramp[Math.min(ramp.length - 2, Math.floor(Math.sqrt(n / 80) * (ramp.length - 1)))];
+    }
+    lines.push(s.replace(/\s+$/, ""));
+  }
+  TEXTS.find(t => t.title === "Mandelbrot").art = "\n" + lines.join("\n");
+})();
+
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+
+const anims = document.getElementById("anims");
+for (const a of ANIMS) {
+  const card = el("a", "card"); card.href = `pieces/${a.file}.html`;
+  const screen = el("div", "screen");
+  const frame = el("iframe"); frame.dataset.src = `pieces/${a.file}.html?embed`;
+  frame.title = a.title; frame.tabIndex = -1; frame.setAttribute("aria-hidden", "true");
+  screen.append(frame);
+  const meta = el("div", "meta"); meta.append(el("h3", null, a.title), el("p", null, a.desc));
+  card.append(screen, meta); anims.append(card);
+}
+
+// load a preview only when it scrolls into view, and pause it when it leaves
+const io = new IntersectionObserver(entries => {
+  for (const e of entries) {
+    const f = e.target;
+    if (e.isIntersecting && !f.src) f.src = f.dataset.src;
+    try { f.contentWindow && f.contentWindow.postMessage({ play: e.isIntersecting }, "*"); } catch (_) {}
+  }
+}, { rootMargin: "120px" });
+document.querySelectorAll("#anims iframe").forEach(f => {
+  io.observe(f);
+  f.addEventListener("load", () => { const r = f.getBoundingClientRect(); f.contentWindow.postMessage({ play: r.bottom > 0 && r.top < innerHeight }, "*"); });
+});
+
+const texts = document.getElementById("texts");
+for (const t of TEXTS) {
+  const art = t.art.replace(/^\n/, "");
+  const card = el("div", "card text-card");
+  const pre = el("pre", "art", art);
+  const meta = el("div", "meta"), row = el("div", "row");
+  const btn = el("button", "copy", "コピー"); btn.type = "button";
+  btn.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(art); btn.textContent = "コピーしました"; }
+    catch (_) { btn.textContent = "コピーできませんでした"; }
+    setTimeout(() => (btn.textContent = "コピー"), 1600);
+  });
+  row.append(el("h3", null, t.title), btn); meta.append(row);
+  card.append(pre, meta); texts.append(card);
+}
+
+// shrink each text art so its longest line fits the card
+function fitArt() {
+  document.querySelectorAll(".text-card .art").forEach(pre => {
+    const lines = pre.textContent.split("\n");
+    const cols = Math.max(...lines.map(l => l.length)), rowsN = lines.length;
+    const w = pre.clientWidth - 28, h = pre.clientHeight - 36;
+    const size = Math.min(12, w / (cols * 0.61), h / (rowsN * 1.25));
+    pre.style.fontSize = size.toFixed(2) + "px";
+  });
+}
+fitArt();
+addEventListener("resize", fitArt);
+</script>
+</body>
+</html>
