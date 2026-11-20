@@ -7,6 +7,10 @@
 <link rel="stylesheet" href="../assets/piece.css">
 <style>
   html,body{margin:0;height:100%;background:#04060b;overflow:hidden;touch-action:none}  canvas{display:block;width:100vw;height:100vh;cursor:grab}
+  .replay{position:fixed;top:12px;left:106px;z-index:2;cursor:pointer;
+    font:12px ui-monospace,Menlo,Consolas,monospace;color:#ffd27a;background:rgba(5,7,13,.65);
+    padding:6px 12px;border:1px solid rgba(255,210,122,.35);border-radius:6px}
+  .replay:hover{color:#fff;border-color:rgba(255,230,170,.8)}
   canvas:active{cursor:grabbing}
 </style>
 </head>
@@ -27,6 +31,7 @@ const gctx = gcv.getContext('2d');
 /* ---------- seeded random ---------- */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 const R = mulberry32(20261224);
+const R2 = mulberry32(1225);          // separate stream for the build-up animation
 const TAU = Math.PI * 2;
 
 /* ---------- scene: a point cloud ----------
@@ -34,9 +39,12 @@ const TAU = Math.PI * 2;
    type: 0 needle, 1 ornament, 2 light, 3 tinsel, 4 trunk, 5 gift, 6 ribbon */
 const STR = 11;
 const P = [];
+const EX = [];                         // per point: centre x y z (baubles) | aux (timing)
+let CUR = [0,0,0,0];
 function add(x,y,z,nx,ny,nz,r,g,b,type,ph){
   const l = Math.hypot(nx,ny,nz) || 1;
   P.push(x,y,z,nx/l,ny/l,nz/l,r,g,b,type,ph);
+  EX.push(CUR[0],CUR[1],CUR[2],CUR[3]);
 }
 
 const Y0 = 0.2, HT = 2.0, RB = 0.95, TIERS = 7;
@@ -68,12 +76,15 @@ for (let i = 0; i < 46; i++) {
   const cx = Math.cos(th)*ro, cz = Math.sin(th)*ro, cy = Y0 + v*HT - 0.05;
   const col = ornPal[(R()*ornPal.length)|0];
   const n = Math.round(190*rad/0.05);
+  CUR = [cx, cy, cz, 6.1 + R2()*1.3];   // each bauble pops in at its own moment
   for (let j = 0; j < n; j++) {
     const u = 2*R()-1, a = R()*TAU, sq = Math.sqrt(1-u*u);
     const nx = sq*Math.cos(a), ny = u, nz = sq*Math.sin(a);
     add(cx+nx*rad, cy+ny*rad, cz+nz*rad, nx, ny, nz, col[0], col[1], col[2], 1, R());
   }
 }
+
+CUR = [0,0,0,0];
 
 // --- fairy lights
 const lightPal = [[1,0.86,0.5],[1,0.86,0.5],[1,0.78,0.38],[1,0.62,0.26],[1,0.32,0.22],[0.9,0.93,1]];
@@ -91,6 +102,7 @@ for (let i = 0; i < NLIGHTS; i++) {
   const turns = 3.6, swags = 5, N = 3800;
   for (let i = 0; i < N; i++) {
     const u = i/(N-1);
+    CUR = [0,0,0,u];
     const v = 0.06 + 0.84*u;
     const ang = turns*TAU*u + 0.8;
     const sw = (u*turns*swags) % 1;
@@ -102,6 +114,8 @@ for (let i = 0; i < NLIGHTS; i++) {
   }
 }
 
+CUR = [0,0,0,0];
+
 // --- trunk
 for (let i = 0; i < 900; i++) {
   const h = R()*(Y0+0.2), a = R()*TAU;
@@ -110,7 +124,9 @@ for (let i = 0; i < 900; i++) {
 }
 
 // --- presents
+let GIFT_I = 0;
 function gift(ang, dist, w, h, d, col, rib){
+  CUR = [0,0,0,GIFT_I++];
   const cx = Math.cos(ang)*dist, cz = Math.sin(ang)*dist;
   const yaw = ang + (R()-0.5)*0.9, c = Math.cos(yaw), s = Math.sin(yaw);
   const faces = [
@@ -151,6 +167,64 @@ gift(5.35, 1.10, 0.20, 0.28, 0.20, [0.20,0.26,0.58], [0.98,0.80,0.32]);
 
 const A = new Float32Array(P);
 const NP = A.length / STR;
+const EXA = new Float32Array(EX);
+
+/* ---------- the build-up: when and how each point arrives ----------
+   needles spiral in from a swirling vortex, trunk grows, presents drop,
+   the garland winds itself on, baubles pop, lights switch on bottom to top,
+   then a comet flies to the top and the star bursts open. */
+const STAR_T = 8.35, INTRO_END = 9.6;
+const TA = new Float32Array(NP), DUR = new Float32Array(NP);
+const RT = new Float32Array(NP), TH = new Float32Array(NP), SA = new Float32Array(NP), SR = new Float32Array(NP), SY = new Float32Array(NP);
+for (let i = 0; i < NP; i++) {
+  const o = i*STR, e = i*4, type = A[o+9], x = A[o], y = A[o+1], z = A[o+2];
+  const v = Math.max(0, Math.min(1, (y - Y0)/HT));
+  if (type === 0) {
+    TA[i] = 0.6 + v*3.4 + R2()*0.5; DUR[i] = 0.8 + R2()*0.7;
+    RT[i] = Math.hypot(x, z); TH[i] = Math.atan2(z, x);
+    SA[i] = 1.8 + R2()*2.2; SR[i] = 0.6 + R2()*0.9; SY[i] = Math.max(0.02, y - 0.5 - R2()*0.9);
+  } else if (type === 4) { TA[i] = 0.2; DUR[i] = 0.8; }
+  else if (type === 1)   { TA[i] = EXA[e+3]; DUR[i] = 0.55; }
+  else if (type === 2)   { TA[i] = 6.5 + v*1.2 + R2()*0.15; DUR[i] = 0.45; }
+  else if (type === 3)   { TA[i] = 4.7 + EXA[e+3]*1.7; DUR[i] = 0.4; }
+  else                   { TA[i] = 1.0 + EXA[e+3]*0.28; DUR[i] = 0.8; }
+}
+const easeOut = u => 1 - (1-u)**3;
+const easeInOut = u => u < 0.5 ? 4*u*u*u : 1 - (-2*u+2)**3/2;
+const easeBack = u => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3*(u-1)**3 + c1*(u-1)**2; };
+const bounce = u => { const n = 7.5625, d = 2.75;
+  if (u < 1/d) return n*u*u; if (u < 2/d) return n*(u -= 1.5/d)*u + 0.75;
+  if (u < 2.5/d) return n*(u -= 2.25/d)*u + 0.9375; return n*(u -= 2.625/d)*u + 0.984375; };
+const smooth = (a, b, x) => { const u = Math.max(0, Math.min(1, (x-a)/(b-a))); return u*u*(3-2*u); };
+function tinselAt(u){
+  const v = 0.06 + 0.84*u, ang = 3.6*TAU*u + 0.8, sw = (u*3.6*5) % 1;
+  const sag = 0.075*(1 - 0.6*v)*Math.sin(Math.PI*sw), ro = RB*(1-v)*0.95 + 0.075;
+  return [Math.cos(ang)*ro, Y0 + v*HT - sag, Math.sin(ang)*ro];
+}
+// the magic comet that leads each stage (tree space), or null between stages
+function cometAt(tt){
+  if (tt >= 0.5 && tt < 4.3) { const s = (tt-0.5)/3.8, v = s*0.97, ang = s*4.2*TAU, r = RB*(1-v) + 0.22;
+    return [Math.cos(ang)*r, Y0 + v*HT, Math.sin(ang)*r]; }
+  if (tt >= 4.7 && tt < 6.4) return tinselAt((tt-4.7)/1.7);
+  if (tt >= 7.75 && tt < STAR_T) { const s = (tt-7.75)/(STAR_T-7.75), ang = s*1.6*TAU, r = (RB*0.6 + 0.3)*(1-s)*(1 - s*0.2);
+    return [Math.cos(ang)*r, Y0 + s*(HT + 0.11), Math.sin(ang)*r]; }
+  return null;
+}
+let SPARKS = [];
+function spawn(p, n, spd, lifeMin, lifeMax){
+  for (let k = 0; k < n && SPARKS.length < 1600; k++)
+    SPARKS.push({ x: p[0], y: p[1], z: p[2], vx: (R2()-0.5)*spd, vy: (R2()-0.5)*spd, vz: (R2()-0.5)*spd,
+                  life: 0, max: lifeMin + R2()*(lifeMax - lifeMin), hue: R2() });
+}
+let introStart = 0.25, burstDone = false, nowT = 0;
+function replay(){ introStart = nowT; burstDone = false; SPARKS = []; }
+if (!EMBED) {
+  const rb = document.createElement('button');
+  rb.className = 'replay'; rb.type = 'button'; rb.textContent = '↻ もう一度';
+  rb.addEventListener('click', replay);
+  document.body.appendChild(rb);
+}
+addEventListener('keydown', e => { if (e.key === 'r' || e.key === 'R') replay(); });
 
 /* ---------- camera / lighting ---------- */
 const D = 5.2, camY = 1.6, tgtY = 1.1;
@@ -190,6 +264,17 @@ addEventListener('resize', resize);
 resize();
 
 /* ---------- helpers ---------- */
+let PC = 0, PR = 0, PZ = 0, PI = -1;
+function projectTree(x, y, z, cy, sy){
+  const xr = x*cy - z*sy, zr = x*sy + z*cy;
+  const dyw = y - camY, dzw = zr + D;
+  const yv = dyw*cp + dzw*sp, zv = -dyw*sp + dzw*cp;
+  if (zv < 0.1) return false;
+  const c = ((W2 + f*xr/zv)/cw)|0, r = ((Hc - f*yv/zv)/ch)|0;
+  if (c < 0 || c >= cols || r < 0 || r >= rows) return false;
+  PC = c; PR = r; PZ = zv; PI = r*cols + c;
+  return true;
+}
 const cache = new Array(32768);
 const tone = v => 1 - Math.exp(-v*1.7);
 function colStr(r,g,b){
@@ -257,6 +342,12 @@ function frame(now){
   const dt = Math.min(0.1, t - prevT); prevT = t;
   if (!dragging) { dragYaw += spin; spin *= 0.94; }
   const yaw = 0.6 + t*0.32 + dragYaw;
+  nowT = t;
+  if (EMBED && t - introStart > 26) replay();       // thumbnails replay the magic now and then
+  const tt = t - introStart;
+  const intro = tt < INTRO_END;
+  const floorK = intro ? smooth(0, 1.6, tt) : 1;
+  const poolK = intro ? 0.3 + 0.7*smooth(6.5, 9, tt) : 1;
   const cy = Math.cos(yaw), sy = Math.sin(yaw);
 
   zb.fill(1e9); chs.fill(0);
@@ -282,23 +373,72 @@ function frame(now){
       const xv = ((c+0.5)*cw - W2)/f;
       const X = xv*s, Z = -D + dz*s;
       const d2 = X*X + Z*Z, dist = Math.sqrt(d2);
-      const pool = Math.exp(-d2/1.5);
+      const pool = Math.exp(-d2/1.5)*poolK;
       const fade = Math.exp(-Math.max(0, dist-1.3)/2.0);
-      let lum = (0.13 + 0.55*pool)*fade;
+      let lum = (0.13 + 0.55*pool)*fade*floorK;
       const hsh = hash2(Math.floor(X*28), Math.floor(Z*28));
-      if (hsh > 0.975) lum += 0.35*fade*(0.5 + 0.5*Math.sin(t*3 + hsh*90));
+      if (hsh > 0.975) lum += 0.35*fade*floorK*(0.5 + 0.5*Math.sin(t*3 + hsh*90));
       const idx = r*cols + c;
       if (lum < 0.035) continue;
       const k = RAMP_FLOOR[Math.min(RAMP_FLOOR.length-1, (lum*RAMP_FLOOR.length*1.25)|0)];
-      const warm = 0.75*pool*fade;
+      const warm = 0.75*pool*fade*floorK;
       put(idx, s, k, 0.45*lum + warm*1.0, 0.52*lum + warm*0.62, 0.74*lum + warm*0.3);
+    }
+  }
+
+  // a glowing magic circle on the snow while the tree builds itself
+  if (intro) {
+    const a = smooth(0, 0.8, tt)*(1 - smooth(8.6, 9.6, tt));
+    if (a > 0.01) {
+      const RUNES = '*+x<>o';
+      for (let ring = 0; ring < 2; ring++) {
+        const NR = ring ? 110 : 160, rad = ring ? 1.12 : 1.42, dir = ring ? 1.3 : -0.8;
+        for (let k = 0; k < NR; k++) {
+          const ang = k/NR*TAU + tt*dir;
+          if (!projectTree(Math.cos(ang)*rad, 0.012, Math.sin(ang)*rad, cy, sy)) continue;
+          if (PZ >= zb[PI]) continue;
+          const rune = (k % 8 === 0);
+          const tw = 0.6 + 0.4*Math.sin(tt*6 + k*1.7);
+          const ch_ = rune ? C(RUNES[(k/8 + (tt*3|0)) % RUNES.length | 0]) : (k % 2 ? C('.') : C('-'));
+          const m = a*tw*(rune ? 1.3 : 0.75);
+          const col_ = ring ? [0.95, 0.78, 0.42] : [0.66, 0.5, 1.0];
+          put(PI, PZ, ch_, col_[0]*m, col_[1]*m, col_[2]*m);
+          gr[PI] += col_[0]*m*0.25; gg[PI] += col_[1]*m*0.25; gb[PI] += col_[2]*m*0.25;
+        }
+      }
     }
   }
 
   // point cloud
   for (let i = 0; i < NP; i++) {
     const o = i*STR;
-    const x = A[o], y = A[o+1], z = A[o+2];
+    let x = A[o], y = A[o+1], z = A[o+2];
+    const type = A[o+9];
+    let fly = 0, flash = 0;
+    if (intro) {
+      const ta = TA[i];
+      if (tt < ta) continue;
+      const u = (tt - ta)/DUR[i];
+      if (u < 1) {
+        if (type === 0) {                      // needles: spiral in from the vortex
+          const k = 1 - easeOut(u);
+          const rr = RT[i] + SR[i]*k, th = TH[i] - SA[i]*k;
+          x = Math.cos(th)*rr; z = Math.sin(th)*rr;
+          y = SY[i] + (y - SY[i])*easeInOut(u);
+          fly = k;
+        } else if (type === 4) {               // trunk grows up out of the snow
+          y *= easeOut(u);
+        } else if (type === 1) {               // baubles pop (with a little overshoot)
+          const e = i*4, s = Math.max(0, easeBack(u));
+          x = EXA[e] + (x - EXA[e])*s; y = EXA[e+1] + (y - EXA[e+1])*s; z = EXA[e+2] + (z - EXA[e+2])*s;
+          flash = 1 - u;
+        } else if (type === 5 || type === 6) { // presents drop and bounce
+          y += (1 - bounce(u))*1.6;
+        } else {                               // garland and lights flash as they appear
+          flash = 1 - u;
+        }
+      }
+    }
     const xr = x*cy - z*sy, zr = x*sy + z*cy;
     const dyw = y - camY, dzw = zr + D;
     const yv = dyw*cp + dzw*sp, zv = -dyw*sp + dzw*cp;
@@ -316,7 +456,7 @@ function frame(now){
     const vx = -xr*il, vy = -yv*il, vz = -zv*il;
     const ndl = Math.max(0, nx*LX + ny*LY + nz*LZ);
     const ndv = nx*vx + ny*vy + nz*vz;
-    const type = A[o+9], ph = A[o+10];
+    const ph = A[o+10];
     const br = A[o+6], bg = A[o+7], bb = A[o+8];
 
     if (type === 0) {                               // needles
@@ -324,12 +464,20 @@ function frame(now){
       if (ndv < 0) lum *= 0.55;
       const k = RAMP_NEEDLE[Math.min(RAMP_NEEDLE.length-1, (lum*RAMP_NEEDLE.length)|0)];
       const m = (ndv < 0 ? 0.45 : 1)*(0.45 + 1.25*ndl);
-      put(idx, zv, k, br*m + 0.01, bg*m + 0.015, bb*m + 0.03);
-      gr[idx] += br*0.05; gg[idx] += bg*0.06; gb[idx] += bb*0.05;
+      if (fly > 0) {                               // in flight: a magic spark, fading into green
+        const a = fly, mc = ph < 0.3 ? [0.72, 0.52, 1.0] : ph < 0.4 ? [0.55, 0.9, 1.0] : [1.0, 0.82, 0.45];
+        const kk = a > 0.55 ? C('*') : a > 0.25 ? C('+') : k;
+        put(idx, zv, kk, (br*m)*(1-a) + mc[0]*a, (bg*m)*(1-a) + mc[1]*a, (bb*m)*(1-a) + mc[2]*a);
+        gr[idx] += mc[0]*0.09*a; gg[idx] += mc[1]*0.09*a; gb[idx] += mc[2]*0.09*a;
+      } else {
+        put(idx, zv, k, br*m + 0.01, bg*m + 0.015, bb*m + 0.03);
+        gr[idx] += br*0.05; gg[idx] += bg*0.06; gb[idx] += bb*0.05;
+      }
     } else if (type === 2) {                         // lights
       const fr = 1.1 + 3.2*((ph*7.31) % 1);
       let I = 0.55 + 0.45*Math.sin(t*fr + ph*TAU);
       if (((ph*13.7 + t*0.25) % 1) < 0.03) I = 1.25;   // occasional sparkle
+      I += flash*2.5;                                  // switch-on flash
       const k = I > 0.85 ? C('@') : I > 0.5 ? C('*') : C('o');
       put(idx, zv - 0.05, k, br*(0.4 + 1.3*I), bg*(0.4 + 1.3*I), bb*(0.4 + 1.3*I));
       glow(c, r, br*I*0.2, bg*I*0.2, bb*I*0.2);
@@ -341,14 +489,15 @@ function frame(now){
       let k;
       if (type === 1) k = spec > 0.45 ? C('@') : lum > 0.75 ? C('O') : lum > 0.45 ? C('o') : C('%');
       else k = spec > 0.4 ? C('*') : lum > 0.55 ? C('#') : C('+');
-      put(idx, zv, k, br*lum + spec*1.1, bg*lum + spec*1.0, bb*lum + spec*0.9);
+      put(idx, zv, k, br*lum + spec*1.1 + flash*0.9, bg*lum + spec*1.0 + flash*0.85, bb*lum + spec*0.9 + flash*0.7);
+      if (flash > 0) glow(c, r, flash*0.05, flash*0.045, flash*0.03);
       if (spec > 0.5) glow(c, r, spec*0.12, spec*0.11, spec*0.1);
       else { gr[idx] += br*0.08; gg[idx] += bg*0.08; gb[idx] += bb*0.08; }
     } else if (type === 3) {                         // tinsel
       const hx = LX + vx, hy = LY + vy, hz = LZ + vz, hl = 1/Math.hypot(hx, hy, hz);
       const spec = Math.pow(Math.max(0, (nx*hx + ny*hy + nz*hz)*hl), 10);
       const shim = 0.5 + 0.5*Math.sin(t*3.2 + ph*40);
-      const lum = (ndv < 0 ? 0.4 : 1)*(0.3 + 0.6*ndl + 0.9*spec*shim);
+      const lum = (ndv < 0 ? 0.4 : 1)*(0.3 + 0.6*ndl + 0.9*spec*shim) + flash*1.4;
       const k = lum > 1.0 ? C('*') : lum > 0.7 ? C('=') : lum > 0.45 ? C('~') : C('-');
       put(idx, zv - 0.01, k, br*lum, bg*lum, bb*lum);
       gr[idx] += 0.12*lum; gg[idx] += 0.09*lum; gb[idx] += 0.03*lum;
@@ -365,26 +514,57 @@ function frame(now){
     }
   }
 
+  // the comet and its sparks
+  if (intro) {
+    const cpos = cometAt(tt);
+    if (cpos) {
+      spawn(cpos, EMBED ? 3 : 7, 0.4, 0.4, 1.2);
+      if (projectTree(cpos[0], cpos[1], cpos[2], cy, sy)) {
+        put(PI, 0, C('@'), 1.4, 1.25, 0.95);
+        bigGlow(PC, PR, 6, 3, 0.55, 0.45, 0.3);
+      }
+    }
+    if (!burstDone && tt >= STAR_T) { burstDone = true; spawn([0, Y0 + HT + 0.11, 0], EMBED ? 90 : 180, 2.6, 0.8, 2.1); }
+  }
+  for (let k = SPARKS.length - 1; k >= 0; k--) {
+    const s = SPARKS[k];
+    s.life += dt;
+    if (s.life >= s.max) { SPARKS[k] = SPARKS[SPARKS.length - 1]; SPARKS.pop(); continue; }
+    s.vy -= 0.45*dt; s.vx *= 0.985; s.vy *= 0.985; s.vz *= 0.985;
+    s.x += s.vx*dt; s.y += s.vy*dt; s.z += s.vz*dt;
+    if (!projectTree(s.x, s.y, s.z, cy, sy) || PZ >= zb[PI]) continue;
+    const a = 1 - s.life/s.max;
+    const col_ = s.hue < 0.25 ? [0.75, 0.55, 1.0] : s.hue < 0.4 ? [0.6, 0.92, 1.0] : [1.0, 0.86, 0.5];
+    const m = 0.4 + 1.1*a;
+    put(PI, PZ, a > 0.7 ? C('*') : a > 0.4 ? C('+') : C('.'), col_[0]*m, col_[1]*m, col_[2]*m);
+    gr[PI] += col_[0]*0.18*a; gg[PI] += col_[1]*0.18*a; gb[PI] += col_[2]*0.18*a;
+  }
+
   // the star on top (screen-space, always faces the camera)
-  {
+  let sScale = 1, rayK = 1, flashS = 0;
+  if (intro) {
+    if (tt < STAR_T) sScale = 0;
+    else { const u = tt - STAR_T; sScale = Math.max(0, easeBack(Math.min(1, u/0.6))); rayK = Math.min(1, u/1.1); flashS = 2.6*Math.exp(-u*2.2); }
+  }
+  if (sScale > 0) {
     const yw = Y0 + HT + 0.11, dyw = yw - camY;
     const yv = dyw*cp + D*sp, zv = -dyw*sp + D*cp;
     const sx = W2, syp = Hc - f*yv/zv;
     const sc = (sx/cw)|0, sr = (syp/ch)|0;
-    const Rs = f*0.12/zv;
+    const Rs = f*0.12/zv*sScale;
     const pulse = 0.85 + 0.15*Math.sin(t*2.1);
     // rays
     const dirs = [[0,-1,'|'],[0,1,'|'],[1,0,'-'],[-1,0,'-'],[0.7071,-0.7071,'/'],[-0.7071,0.7071,'/'],[-0.7071,-0.7071,'\\'],[0.7071,0.7071,'\\']];
     dirs.forEach((dd, k) => {
       const long = (k < 4) ? 1.35 : 1.0;
-      const Lr = Rs*(2.3 + 0.5*Math.sin(t*1.4 + k*1.7))*long*(k === 1 ? 0.6 : 1);
+      const Lr = Math.max(Rs, Rs*(2.3 + 0.5*Math.sin(t*1.4 + k*1.7))*long*(k === 1 ? 0.6 : 1)*rayK);
       const step = Math.min(cw, ch)*0.5;
       for (let d = Rs*0.9; d < Lr; d += step) {
         const c = ((sx + dd[0]*d)/cw)|0, r = ((syp + dd[1]*d)/ch)|0;
         if (c < 0 || r < 0 || c >= cols || r >= rows) continue;
         const i = r*cols + c;
         if (zb[i] < BG) continue;
-        const a = (1 - (d - Rs*0.9)/(Lr - Rs*0.9))*pulse;
+        const a = (1 - (d - Rs*0.9)/(Lr - Rs*0.9))*pulse*(1 + flashS*0.4);
         put(i, BG - 1, C(dd[2]), 1.0*a, 0.8*a, 0.35*a);
       }
     });
@@ -400,8 +580,9 @@ function frame(now){
       const a = pulse*(core ? 1.5 : 1.05);
       put(r*cols + c, 0, core ? C('@') : C('#'), 1.0*a, 0.82*a, 0.32*a);
     }
-    bigGlow(sc, sr, Math.ceil(Rs*3.0/cw), Math.ceil(Rs*3.0/ch), 0.42*pulse, 0.3*pulse, 0.09*pulse);
-    bigGlow(sc, sr, Math.ceil(Rs*1.3/cw), Math.ceil(Rs*1.3/ch), 0.5*pulse, 0.42*pulse, 0.2*pulse);
+    const gk = pulse + flashS;
+    bigGlow(sc, sr, Math.ceil(Rs*(3.0 + flashS)/cw), Math.ceil(Rs*(3.0 + flashS)/ch), 0.42*gk, 0.3*gk, 0.09*gk);
+    bigGlow(sc, sr, Math.ceil(Rs*1.3/cw), Math.ceil(Rs*1.3/ch), 0.5*gk, 0.42*gk, 0.2*gk);
   }
 
   // snow
@@ -472,7 +653,7 @@ function frame(now){
   ctx.fillStyle = '#5c6476';
   ctx.fillText('agac.js', pad, H - lh*0.45);
   ctx.textAlign = 'right';
-  ctx.fillText(`running · ${fps} fps`, W - pad, H - lh*0.45);
+  ctx.fillText(intro ? `conjuring · ${Math.min(100, Math.round(tt/INTRO_END*100))}%` : `running · ${fps} fps`, W - pad, H - lh*0.45);
   ctx.fillStyle = 'rgba(140,150,170,0.25)';
   ctx.fillRect(pad, H - lh*1.15, W - pad*2, 1);
   ctx.textAlign = 'right';
